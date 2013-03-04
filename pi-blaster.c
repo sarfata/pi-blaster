@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <getopt.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -158,6 +159,7 @@ static volatile uint32_t *dma_reg;
 static volatile uint32_t *gpio_reg;
 
 static int delay_hw = DELAY_VIA_PWM;
+static int invert_mode = 0;
 
 static float channel_pwm[NUM_CHANNELS];
 
@@ -230,7 +232,7 @@ mem_virt_to_phys(void *virt)
 static void *
 map_peripheral(uint32_t base, uint32_t len)
 {
-	int fd = open("/dev/mem", O_RDWR);
+	int fd = open("/dev/mem", O_RDWR | O_SYNC);
 	void * vaddr;
 
 	if (fd < 0)
@@ -277,8 +279,11 @@ update_pwm()
 	uint32_t mask;
 	
 	/* First we turn on the channels that need to be on */
-	/*   Take the first DMA Packet and set it's target to gpset0 register */
-	ctl->cb[0].dst = phys_gpset0;
+	/*   Take the first DMA Packet and set it's target to start pulse */
+	if (invert_mode)
+		ctl->cb[0].dst = phys_gpclr0;
+	else
+		ctl->cb[0].dst = phys_gpset0;
 
 	/*   Now create a mask of all the pins that should be on */
 	mask = 0;
@@ -292,7 +297,10 @@ update_pwm()
 	
 	/* Now we go through all the samples and turn the pins off when needed */
 	for (j = 1; j < NUM_SAMPLES; j++) {
-		ctl->cb[j*2].dst = phys_gpclr0;
+		if (invert_mode)
+			ctl->cb[j*2].dst = phys_gpset0;
+		else
+			ctl->cb[j*2].dst = phys_gpclr0;
 		mask = 0;
 		for (i = 0; i < NUM_CHANNELS; i++) {
 			if ((float)j/NUM_SAMPLES > channel_pwm[i])
@@ -361,6 +369,7 @@ init_ctrl_data(void)
 	dma_cb_t *cbp = ctl->cb;
 	uint32_t phys_fifo_addr;
 	uint32_t phys_gpclr0 = 0x7e200000 + 0x28;
+	uint32_t phys_gpset0 = 0x7e200000 + 0x1c;
 	uint32_t mask;
 	int i;
 
@@ -387,7 +396,10 @@ init_ctrl_data(void)
 		/* First DMA command */
 		cbp->info = DMA_NO_WIDE_BURSTS | DMA_WAIT_RESP;
 		cbp->src = mem_virt_to_phys(ctl->sample + i);
-		cbp->dst = phys_gpclr0;
+		if (invert_mode)
+			cbp->dst = phys_gpset0;
+		else
+			cbp->dst = phys_gpclr0;
 		cbp->length = 4;
 		cbp->stride = 0;
 		cbp->next = mem_virt_to_phys(cbp + 1);
@@ -505,14 +517,63 @@ go_go_go(void)
 	}
 }
 
+void
+parseargs(int argc, char **argv)
+{
+	int index;
+	int c;
+	int invalid = 0;
+
+	static struct option longopts[] =
+	{
+		{"pcm", no_argument, 0, 'p'},
+		{"invert", no_argument, 0, 'i'},
+		{0, 0, 0, 0}
+	};
+
+	while (1)
+	{
+
+		index = 0;
+		c = getopt_long(argc, argv, "pi", longopts, &index);
+
+		if (c == -1)
+			break;
+
+		switch (c)
+		{
+		case 0:
+			/* handle flag options (array's 3rd field non-0) */
+			break;
+
+		case 'p':
+			delay_hw = DELAY_VIA_PCM;
+			break;
+
+		case 'i':
+			invert_mode = 1;
+			break;
+
+		case '?':
+			/* getopt_long already reported error? */
+			invalid = 1;
+
+		default:
+			invalid = 1;
+		}
+	}
+
+	if (invalid)
+		exit(-1);
+
+}
+
 int
 main(int argc, char **argv)
 {
 	int i;
 
-	// Very crude...
-	if (argc == 2 && !strcmp(argv[1], "--pcm"))
-		delay_hw = DELAY_VIA_PCM;
+	parseargs(argc, argv);
 
 	printf("Using hardware:                 %5s\n", delay_hw == DELAY_VIA_PWM ? "PWM" : "PCM");
 	printf("Number of channels:             %5d\n", NUM_CHANNELS);
@@ -540,7 +601,7 @@ main(int argc, char **argv)
 	make_pagemap();
 
 	for (i = 0; i < NUM_CHANNELS; i++) {
-		gpio_set(pin2gpio[i], 0);
+		gpio_set(pin2gpio[i], invert_mode);
 		gpio_set_mode(pin2gpio[i], GPIO_MODE_OUT);
 	}
 

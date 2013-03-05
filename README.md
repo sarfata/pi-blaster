@@ -95,6 +95,12 @@ To invert the pulse (off = pin HIGH, pulse = pin LOW), use:
 
 This can be useful for common anode LEDs or other devices that expect an active-low signal.
 
+To view help or version information, use:
+
+    --help
+
+    --version
+
 ## Warnings and other caveats
 
 **All the pins will be configured as outputs. Do not plug something on an input or you might destroy it!**

@@ -34,6 +34,8 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
+static char VERSION[] = "0.1.0";
+
 static uint8_t pin2gpio[] = {
 	4,	// P1-7
 	17,	// P1-11
@@ -522,12 +524,13 @@ parseargs(int argc, char **argv)
 {
 	int index;
 	int c;
-	int invalid = 0;
 
 	static struct option longopts[] =
 	{
-		{"pcm", no_argument, 0, 'p'},
+		{"help", no_argument, 0, 'h'},
 		{"invert", no_argument, 0, 'i'},
+		{"pcm", no_argument, 0, 'p'},
+		{"version", no_argument, 0, 'v'},
 		{0, 0, 0, 0}
 	};
 
@@ -535,7 +538,7 @@ parseargs(int argc, char **argv)
 	{
 
 		index = 0;
-		c = getopt_long(argc, argv, "pi", longopts, &index);
+		c = getopt_long(argc, argv, "hipv", longopts, &index);
 
 		if (c == -1)
 			break;
@@ -546,26 +549,36 @@ parseargs(int argc, char **argv)
 			/* handle flag options (array's 3rd field non-0) */
 			break;
 
-		case 'p':
-			delay_hw = DELAY_VIA_PCM;
-			break;
+		case 'h':
+			fprintf(stderr, "%s version %s\n", argv[0], VERSION);
+			fprintf(stderr, "Usage: %s [-hipv]\n"
+				"-h (--help)    - this information\n"
+				"-i (--invert)  - invert pin output (pulse LOW)\n"
+				"-p (--pcm)     - use pcm for dmascheduling\n"
+				"-v (--version) - version information\n"
+				, argv[0]);
+			exit(-1);
 
 		case 'i':
 			invert_mode = 1;
 			break;
 
+		case 'p':
+			delay_hw = DELAY_VIA_PCM;
+			break;
+
+		case 'v':
+			fprintf(stderr, "%s version %s\n", argv[0], VERSION);
+			exit(-1);
+
 		case '?':
 			/* getopt_long already reported error? */
-			invalid = 1;
+			exit(-1);
 
 		default:
-			invalid = 1;
+			exit(-1);
 		}
 	}
-
-	if (invalid)
-		exit(-1);
-
 }
 
 int

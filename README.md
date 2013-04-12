@@ -35,7 +35,7 @@ pi-blaster creates a special file (FIFO) in `/dev/pi-blaster`. Any application o
 
 **Important: when using pi-blaster, all the pins are configured as output.**
 
-To set the value of a PIN, you write a command to `/dev/pi-blaster` in the form <channel>=<value> where <value> must be a number between 0 and 1 (included).
+To set the value of a PIN, you write a command to `/dev/pi-blaster` in the form `<channel>=<value>` where `<value>` must be a number between 0 and 1 (included).
 
     Channel number    GPIO number   Pin in P1 header
           0               4             P1-7
@@ -58,7 +58,7 @@ Examples:
 
   * To set pin1 to a PWM of 20%
 
-    echo "1=0.2"
+    echo "1=0.2" > /dev/pi-blaster
 
 ## How to adjust the frequency and the resolution of the PWM
 

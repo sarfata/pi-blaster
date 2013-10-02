@@ -1,9 +1,12 @@
 pi-blaster
 ==========
 
-This project enables PWM on all the GPIO pins of a Raspberry Pi. The technique used is extremely efficient: does not use the CPU and gives very stable pulses.
+This project enables PWM on the GPIO pins you request of a Raspberry Pi. The technique used is extremely efficient: does not use the CPU and gives very stable pulses.
 
-This project is based on the excellent work of Richard Hirst for ServoBlaster: https://github.com/richardghirst/PiBits
+This project is based on the excellent work of Tomas Sarlandie pi-blaster: https://github.com/sarfata/pi-blaster
+and the modifications/updates made by Michael Vitousek: https://github.com/mvitousek/pi-blaster
+
+Pi-blaster project is based on the excellent work of Richard Hirst for ServoBlaster: https://github.com/richardghirst/PiBits
 
 ## How to build and install
 
@@ -33,32 +36,39 @@ This will stop pi-blaster and prevent it from starting automatically on the next
 
 pi-blaster creates a special file (FIFO) in `/dev/pi-blaster`. Any application on your Raspberry Pi can write to it (this means that only pi-blaster needs to be root, your application can run as a normal user).
 
-**Important: when using pi-blaster, all the GPIO pins are configured as output.**
+**Important: when using pi-blaster, the GPIO pins you send to it are configured as output.**
 
-To set the value of a PIN, you write a command to `/dev/pi-blaster` in the form `<channel>=<value>` where `<value>` must be a number between 0 and 1 (included).
+To set the value of a PIN, you write a command to `/dev/pi-blaster` in the form `<GPIOPinName>=<value>` where `<value>` must be a number between 0 and 1 (included).
 
-    Channel number    GPIO number   Pin in P1 header
-          0               4             P1-7
-          1              17             P1-11
-          2              18             P1-12
-          3              21             P1-13
-          4              22             P1-15
-          5              23             P1-16
-          6              24             P1-18
-          7              25             P1-22
+      GPIO number   Pin in P1 header
+          4              P1-7
+          17             P1-11
+          18             P1-12
+          21             P1-13
+          22             P1-15
+          23             P1-16
+          24             P1-18
+          25             P1-22
 
-Examples:
-  * To completely turn off pin0: 
+Examples: Turning PWM pins ON
+  * To completely turn off GPIO pin 17:
 
-    echo "0=0" > /dev/pi-blaster
+    echo "17=0" > /dev/pi-blaster
 
-  * To completely turn on pin1:
+  * To completely turn on GPIO pin 17:
 
-    echo "1=1" > /dev/pi-blaster
+    echo "17=1" > /dev/pi-blaster
 
-  * To set pin1 to a PWM of 20%
+  * To set GPIO pin 17 to a PWM of 20%
 
-    echo "1=0.2" > /dev/pi-blaster
+    echo "17=0.2" > /dev/pi-blaster
+
+Examples: Turning PWM pins OFF (releasing a pin so it can be used as
+digital GPIO)
+
+  * To release previously turned ON GPIO pin 17:
+
+    echo "release 17" > /dev/pi-blaster
 
 ### NodeJS Library
 
@@ -111,7 +121,7 @@ To view help or version information, use:
 
 ## Warnings and other caveats
 
-**All the pins will be configured as outputs. Do not plug something on an input or you might destroy it!**
+**Pins being used by pi-blaster will be configured as outputs. Do not plug something on an input or you might destroy it!**
 
 This daemon uses the hardware PWM generator of the raspberry pi to get precise timings. This might interfere with your sound card output.
 There is experimental support for a PCM time-source. If you are interested, I suggest you look at Richard Hirst original project (ServoBlaster) and try the `--pcm` option.
@@ -122,7 +132,7 @@ This library was developed for TBideas high power LED driver. You can read more 
 
 ## Contributors
 
-Pete Nelson (https://github.com/petiepooo)
+Edgar Siva (https://github.com/edgarsilva)
 
 ## License
 

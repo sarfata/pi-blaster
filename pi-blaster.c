@@ -269,6 +269,23 @@ is_known_pin(int pin){
   return(found);
 }
 
+static void
+print_pins(){
+  int i;
+  char sep;
+
+  for (i = 0; i < NUM_CHANNELS; i++) {
+    if (pin2gpio[i] != 0) {
+      fprintf(stdout, "%c%d", sep, pin2gpio[i]);
+      sep = ',';
+    }
+  }
+
+  if (sep == ',')
+    fprintf(stdout, "\n");
+
+}
+
 // Set the pin to a pin2gpio element so pi-blaster can write to it,
 // and set the width of the PWM pulse to the element with the same index
 // in channel_pwm array.
@@ -629,40 +646,52 @@ init_channel_pwm(void)
 static void
 go_go_go(void)
 {
-	FILE *fp;
+  FILE *fp;
 
-	if ((fp = fopen(DEVFILE, "r+")) == NULL)
-		fatal("pi-blaster: Failed to open %s: %m\n", DEVFILE);
+  if ((fp = fopen(DEVFILE, "r+")) == NULL)
+    fatal("pi-blaster: Failed to open %s: %m\n", DEVFILE);
 
-	char *lineptr = NULL, nl;
-	size_t linelen;
+  char *lineptr = NULL, nl;
+  size_t linelen;
 
-	for (;;) {
-		int n, servo;
-		float value;
-		
-		if ((n = getline(&lineptr, &linelen, fp)) < 0)
-			continue;
-		//fprintf(stderr, "[%d]%s", n, lineptr);
-		n = sscanf(lineptr, "%d=%f%c", &servo, &value, &nl);
-		if (n !=3 || nl != '\n') {
-			//fprintf(stderr, "Bad input: %s", lineptr);
-      n = sscanf(lineptr, "release %d", &servo);
-      if (n != 1 || nl != '\n') {
-        fprintf(stderr, "Bad input: %s", lineptr);
+  for (;;) {
+    int n, pwmPin, reportNum;
+    float value;
+
+    if ((n = getline(&lineptr, &linelen, fp)) < 0)
+      continue;
+
+    //fprintf(stderr, "[%d]%s", n, lineptr);
+    n = sscanf(lineptr, "%d=%f%c", &pwmPin, &value, &nl);
+
+    if (n !=3 || nl != '\n') {
+      n = sscanf(lineptr, "release %d%c", &pwmPin, &nl);
+
+      // if the params detected is greater than 1 and the last char is not
+      // \n (new line) then invalid input string. 
+      if (n != 2 || nl != '\n') {
+        n = sscanf(lineptr, "report %d%c", &reportNum, &nl);
+        if (n != 2 || nl != '\n') {
+          fprintf(stderr, "Bad input: %s", lineptr);
+        } else if (reportNum ==  1) {
+          print_pins();
+        } else {
+          fprintf(stderr, "Invalid report num %d, try command 'report 1'", reportNum);
+        }
       } else {
         // Release Pin from pin2gpio array if the release command is received.
-        release_pwm(servo);
+        release_pwm(pwmPin);
       }
-		} else if (servo < 0){ // removed servo validation against CHANNEL_NUM no longer needed since now we used real GPIO names
-			fprintf(stderr, "Invalid channel number %d\n", servo);
-		} else if (value < 0 || value > 1) {
-			fprintf(stderr, "Invalid value %f\n", value);
-		} else {
-			set_pwm(servo, value);
-		}
-	}
+    } else if (pwmPin < 0){
+      fprintf(stderr, "Invalid channel number %d\n", pwmPin);
+    } else if (value < 0 || value > 1) {
+      fprintf(stderr, "Invalid value %f\n", value);
+    } else {
+      set_pwm(pwmPin, value);
+    }
+  }
 }
+
 
 void
 parseargs(int argc, char **argv)

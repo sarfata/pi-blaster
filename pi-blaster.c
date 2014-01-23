@@ -269,21 +269,20 @@ is_known_pin(int pin){
   return(found);
 }
 
-static void
-print_pins(){
+char *
+used_pins() {
   int i;
   char sep = ' ';
+  char *str = malloc (sizeof (char));
 
   for (i = 0; i < NUM_CHANNELS; i++) {
     if (pin2gpio[i] != 0) {
-      fprintf(stdout, "%c%d", sep, pin2gpio[i]);
-      sep = ',';
+      sprintf(str, "%s%c%d:%2.2f", str, sep, pin2gpio[i], channel_pwm[i]);
+      sep = ' ';
     }
   }
 
-  if (sep == ',')
-    fprintf(stdout, "\n");
-
+  return str;
 }
 
 // Set the pin to a pin2gpio element so pi-blaster can write to it,
@@ -674,7 +673,7 @@ go_go_go(void)
         if (n != 2 || nl != '\n') {
           fprintf(stderr, "Bad input: %s", lineptr);
         } else if (reportNum ==  1) {
-          print_pins();
+          fprintf(stdout, "{%s }\n", used_pins());
         } else {
           fprintf(stderr, "Invalid report num %d, try command 'report 1'", reportNum);
         }

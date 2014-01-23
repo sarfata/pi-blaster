@@ -277,7 +277,7 @@ used_pins() {
 
   for (i = 0; i < NUM_CHANNELS; i++) {
     if (pin2gpio[i] != 0) {
-      sprintf(str, "%s%c%d:%f", str, sep, pin2gpio[i], channel_pwm[i]);
+      sprintf(str, "%s%c%d:%2.2f", str, sep, pin2gpio[i], channel_pwm[i]);
       sep = ' ';
     }
   }

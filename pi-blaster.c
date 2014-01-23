@@ -272,7 +272,7 @@ is_known_pin(int pin){
 static void
 print_pins(){
   int i;
-  char sep;
+  char sep = ' ';
 
   for (i = 0; i < NUM_CHANNELS; i++) {
     if (pin2gpio[i] != 0) {

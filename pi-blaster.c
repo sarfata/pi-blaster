@@ -47,7 +47,7 @@ static char VERSION[] = "SNAPSHOT";
 
 // MAX_CHANNELS is both the highest gpio we can address
 // and the maximum number of channels
-#define MAX_CHANNELS	32
+#define MAX_CHANNELS	46
 
 // Create default known_pins with raspberry pi list of pins
 // to compare against the param received.
@@ -61,6 +61,9 @@ static uint8_t known_pins[MAX_CHANNELS] = {
 		23,     // P1-16
 		24,     // P1-18
 		25,     // P1-22
+		34,
+		35,
+		36,
 };
 
 // Create a list of reserved GPIO pins
@@ -107,8 +110,8 @@ static uint8_t pin2gpio[MAX_CHANNELS];
 // will use too much memory bandwidth.  10us is a good value, though you
 // might be ok setting it as low as 2us.
 
-#define CYCLE_TIME_US	10000
-#define SAMPLE_US		10
+#define CYCLE_TIME_US	20000
+#define SAMPLE_US		20
 #define NUM_SAMPLES		(CYCLE_TIME_US/SAMPLE_US)
 #define NUM_CBS			(NUM_SAMPLES*2)
 
@@ -246,7 +249,7 @@ typedef struct {
 } dma_cb_t;
 
 struct ctl {
-	uint32_t sample[NUM_SAMPLES];
+	uint64_t sample[NUM_SAMPLES];
 	dma_cb_t cb[NUM_CBS];
 };
 
@@ -310,10 +313,12 @@ gpio_set_mode(uint32_t pin, uint32_t mode)
 static void
 gpio_set(int pin, int level)
 {
+	int reg_offset = pin / 32;
+	int _pin = pin % 32;
 	if (level)
-		gpio_reg[GPIO_SET0] = 1 << pin;
+		gpio_reg[GPIO_SET0 + reg_offset] = 1 << _pin;
 	else
-		gpio_reg[GPIO_CLR0] = 1 << pin;
+		gpio_reg[GPIO_CLR0 + reg_offset] = 1 << _pin;
 }
 
 static void
@@ -607,7 +612,7 @@ update_pwm()
 	uint32_t phys_gpclr0 = GPIO_PHYS_BASE + 0x28;
 	uint32_t phys_gpset0 = GPIO_PHYS_BASE + 0x1c;
 	struct ctl *ctl = (struct ctl *)mbox.virt_addr;
-	uint32_t mask;
+	uint64_t mask;
 
 	int i, j;
 	/* First we turn on the channels that need to be on */
@@ -671,7 +676,7 @@ init_ctrl_data(void)
 	uint32_t phys_fifo_addr;
 	uint32_t phys_gpclr0 = GPIO_PHYS_BASE + 0x28;
 	uint32_t phys_gpset0 = GPIO_PHYS_BASE + 0x1c;
-	uint32_t mask;
+	uint64_t mask;
 	int i;
 
 	if (delay_hw == DELAY_VIA_PWM)
@@ -701,7 +706,7 @@ init_ctrl_data(void)
 			cbp->dst = phys_gpset0;
 		else
 			cbp->dst = phys_gpclr0;
-		cbp->length = 4;
+		cbp->length = 8;
 		cbp->stride = 0;
 		cbp->next = mem_virt_to_phys(cbp + 1);
 		cbp++;

@@ -139,7 +139,7 @@ static uint8_t pin2gpio[MAX_CHANNELS];
 #define PCM_LEN			0x24
 
 #define DMA_SRC_INC        (1<<8)
-#define DMA_DEST_INC       (1<<4)
+#define DMA_DST_INC       (1<<4)
 #define DMA_NO_WIDE_BURSTS	(1<<26)
 #define DMA_WAIT_RESP		(1<<3)
 #define DMA_D_DREQ		(1<<6)

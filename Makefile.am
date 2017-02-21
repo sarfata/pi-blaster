@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = foreign
 
-#CFLAGS = -g -DDEBUG -Wall -pedantic
+#CFLAGS = -g -DDEBUG -Wall -pedantic -std=c99
 CFLAGS = -Wall -pedantic -std=c99
 EXTRA_DIST = pi-blaster.service
 

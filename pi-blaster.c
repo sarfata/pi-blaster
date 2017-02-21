@@ -115,7 +115,7 @@ static uint8_t pin2gpio[MAX_CHANNELS];
 #define NUM_SAMPLES		(CYCLE_TIME_US/SAMPLE_US)
 #define NUM_CBS			(NUM_SAMPLES*2)
 
-#define NUM_PAGES		((NUM_CBS * sizeof(dma_cb_t) + NUM_SAMPLES * 4 + \
+#define NUM_PAGES		((NUM_CBS * sizeof(dma_cb_t) + NUM_SAMPLES * 8 + \
 					PAGE_SIZE - 1) >> PAGE_SHIFT)
 
 #define DMA_BASE		(periph_virt_base + 0x00007000)
@@ -316,9 +316,9 @@ gpio_set(int pin, int level)
 	int reg_offset = pin / 32;
 	int _pin = pin % 32;
 	if (level)
-		gpio_reg[GPIO_SET0 + reg_offset] = 1 << _pin;
+		gpio_reg[GPIO_SET0 + reg_offset] = (uint64_t)1 << _pin;
 	else
-		gpio_reg[GPIO_CLR0 + reg_offset] = 1 << _pin;
+		gpio_reg[GPIO_CLR0 + reg_offset] = (uint64_t)1 << _pin;
 }
 
 static void
@@ -627,7 +627,7 @@ update_pwm()
 	for (i = 0; i < num_channels; i++) {
 	// Check the pin2gpio pin has been set to avoid locking all of them as PWM.
 		if (channel_pwm[i] > 0 && pin2gpio[i]) {
-			mask |= 1 << pin2gpio[i];
+			mask |= (uint64_t)1 << pin2gpio[i];
 		}
 	}
 	/*   And give that to the DMA controller to write */
@@ -643,7 +643,7 @@ update_pwm()
 		for (i = 0; i < num_channels; i++) {
 			// Check the pin2gpio pin has been set to avoid locking all of them as PWM.
 			if ((float)j/NUM_SAMPLES > channel_pwm[i] && pin2gpio[i])
-				mask |= 1 << pin2gpio[i];
+				mask |= (uint64_t)1 << pin2gpio[i];
 		}
 		ctl->sample[j] = mask;
 	}
@@ -688,7 +688,7 @@ init_ctrl_data(void)
 	// Calculate a mask to turn off all the servos
 	mask = 0;
 	for (i = 0; i < num_channels; i++){
-		mask |= 1 << known_pins[i];
+		mask |= (uint64_t)1 << known_pins[i];
 	}
 	for (i = 0; i < NUM_SAMPLES; i++)
 		ctl->sample[i] = mask;

@@ -138,6 +138,8 @@ static uint8_t pin2gpio[MAX_CHANNELS];
 #define PCM_PHYS_BASE	(periph_phys_base + PCM_BASE_OFFSET)
 #define PCM_LEN			0x24
 
+#define DMA_SRC_INC        (1<<8)
+#define DMA_DEST_INC       (1<<4)
 #define DMA_NO_WIDE_BURSTS	(1<<26)
 #define DMA_WAIT_RESP		(1<<3)
 #define DMA_D_DREQ		(1<<6)
@@ -316,9 +318,9 @@ gpio_set(int pin, int level)
 	int reg_offset = pin / 32;
 	int _pin = pin % 32;
 	if (level)
-		gpio_reg[GPIO_SET0 + reg_offset] = (uint64_t)1 << _pin;
+		gpio_reg[GPIO_SET0 + reg_offset] = 1 << _pin;
 	else
-		gpio_reg[GPIO_CLR0 + reg_offset] = (uint64_t)1 << _pin;
+		gpio_reg[GPIO_CLR0 + reg_offset] = 1 << _pin;
 }
 
 static void
@@ -700,7 +702,7 @@ init_ctrl_data(void)
 	 */
 	for (i = 0; i < NUM_SAMPLES; i++) {
 		/* First DMA command */
-		cbp->info = DMA_NO_WIDE_BURSTS | DMA_WAIT_RESP;
+		cbp->info = DMA_SRC_INC | DMA_DST_INC | DMA_NO_WIDE_BURSTS | DMA_WAIT_RESP;
 		cbp->src = mem_virt_to_phys(ctl->sample + i);
 		if (invert_mode)
 			cbp->dst = phys_gpset0;

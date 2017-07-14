@@ -110,8 +110,10 @@ static uint8_t pin2gpio[MAX_CHANNELS];
 // will use too much memory bandwidth.  10us is a good value, though you
 // might be ok setting it as low as 2us.
 
-#define CYCLE_TIME_US	20000
-#define SAMPLE_US		20
+//#define CYCLE_TIME_US	20000
+//#define SAMPLE_US		20
+#define CYCLE_TIME_US	2000
+#define SAMPLE_US		2
 #define NUM_SAMPLES		(CYCLE_TIME_US/SAMPLE_US)
 #define NUM_CBS			(NUM_SAMPLES*2)
 
@@ -862,6 +864,16 @@ static void go_go_go(void) {
 				fprintf(stderr, "Invalid value %f\n", value);
 			} else {
 				set_all_pwm(value);
+			}
+		} else if (sscanf(lineptr, "%d=%fus%c", &servo, &value, &nl) == 3
+				&& nl == '\n') {
+			value = value / (float)CYCLE_TIME_US;
+			if (servo < 0) {
+				fprintf(stderr, "Invalid channel number %d\n", servo);
+			} else if (value < 0 || value > 1) {
+				fprintf(stderr, "Invalid value %f\n", value);
+			} else {
+				set_pwm(servo, value);
 			}
 		} else if (sscanf(lineptr, "%d=%f%c", &servo, &value, &nl) == 3
 				&& nl == '\n') {

@@ -51,9 +51,8 @@ static char VERSION[] = "SNAPSHOT";
 
 // Create default known_pins with raspberry pi list of pins
 // to compare against the param received.
-static uint8_t known_pins[MAX_CHANNELS] = {
-		4,      // P1-7
-		17,// P1-11
+static uint8_t known_pins[MAX_CHANNELS] = { 4,      // P1-7
+		17,      // P1-11
 		18,     // P1-12
 		27,     // P1-13
 //		21,     // P1-40
@@ -88,8 +87,6 @@ static uint8_t banned_pins[MAX_CHANNELS] = { 6, // On Model B, it is in use for 
 // Set num of possible PWM channels based on the known pins size.
 
 uint8_t num_channels = (sizeof(known_pins) / sizeof(known_pins[0]));
-
-uint8_t sync_pwm = 1;
 
 // pin2gpio array is not setup as empty to avoid locking all GPIO
 // inputs as PWM, they are set on the fly by the pin param passed.
@@ -274,6 +271,7 @@ static float channel_pwm[MAX_CHANNELS];
 
 static void set_pwm(int channel, float value);
 static void update_pwm();
+static void update_pwm_one(int pin, float width, float last_width);
 static void fatal(char *fmt, ...);
 
 int mbox_open() {
@@ -550,8 +548,20 @@ static void release_pwm(int pin) {
 
 // Set pin2gpio pins, channel width and update the pwm send to pins being used.
 static void set_pwm(int channel, float width) {
-	set_pin(channel, width);
-	if (sync_pwm) {
+	int increment = 0;
+	float last_width = 0;
+	for (int i = 0; i < num_channels; i++) {
+		if (pin2gpio[i] == channel) {
+			last_width = channel_pwm[i];
+			channel_pwm[i] = width;
+			increment = 1;
+			break;
+		}
+	}
+	if (increment) {
+		update_pwm_one(channel, width, last_width);
+	} else {
+		set_pin(channel, width);
 		update_pwm();
 	}
 }
@@ -634,6 +644,24 @@ static void update_pwm() {
 			break;
 		}
 		ctl->sample[j] = mask;
+	}
+}
+
+static void update_pwm_one(int pin, float width, float last_width) {
+	struct ctl *ctl = (struct ctl *) mbox.virt_addr;
+
+	int last_idx = last_width * NUM_SAMPLES;
+	int idx = width * NUM_SAMPLES;
+	if (last_idx == idx) {
+		return;
+	} else if (last_idx < idx) {
+		for (int j = last_idx; j < NUM_SAMPLES && j <= idx; j++) {
+			ctl->sample[j] &= ~((uint64_t) 1 << pin);
+		}
+	} else {
+		for (int j = last_idx; j >= 0 && j >= idx; j--) {
+			ctl->sample[j] |= (uint64_t) 1 << pin;
+		}
 	}
 }
 
@@ -867,7 +895,7 @@ static void go_go_go(void) {
 			}
 		} else if (sscanf(lineptr, "%d=%fus%c", &servo, &value, &nl) == 3
 				&& nl == '\n') {
-			value = value / (float)CYCLE_TIME_US;
+			value = value / (float) CYCLE_TIME_US;
 			if (servo < 0) {
 				fprintf(stderr, "Invalid channel number %d\n", servo);
 			} else if (value < 0 || value > 1) {
@@ -884,11 +912,6 @@ static void go_go_go(void) {
 			} else {
 				set_pwm(servo, value);
 			}
-		} else if (!strcmp(lineptr, "sync=on\n")) {
-			sync_pwm = 1;
-			update_pwm();
-		} else if (!strcmp(lineptr, "sync=off\n")) {
-			sync_pwm = 0;
 		} else {
 			fprintf(stderr, "Bad input: %s", lineptr);
 		}

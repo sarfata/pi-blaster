@@ -647,21 +647,28 @@ static void update_pwm() {
 	}
 }
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 static void update_pwm_one(int pin, float width, float last_width) {
 	struct ctl *ctl = (struct ctl *) mbox.virt_addr;
 
 	int last_idx = last_width * NUM_SAMPLES;
 	int idx = width * NUM_SAMPLES;
+	last_idx = MAX(1, MIN(last_idx, NUM_SAMPLES-1));
+	idx = MAX(1, MIN(idx, NUM_SAMPLES-1));
+
 	if (last_idx == idx) {
 		return;
 	} else if (last_idx < idx) {
 		for (int j = last_idx; j < NUM_SAMPLES && j <= idx; j++) {
 			ctl->sample[j] &= ~((uint64_t) 1 << pin);
 		}
+		ctl->sample[0] |= (uint64_t) 1 << pin;
 	} else {
-		for (int j = last_idx; j >= 0 && j >= idx; j--) {
+		for (int j = last_idx; j >= 1 && j >= idx; j--) {
 			ctl->sample[j] |= (uint64_t) 1 << pin;
 		}
+		ctl->sample[0] |= (uint64_t) 1 << pin;
 	}
 }
 

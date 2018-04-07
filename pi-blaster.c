@@ -51,16 +51,25 @@ static char VERSION[] = "SNAPSHOT";
 
 // Create default known_pins with raspberry pi list of pins
 // to compare against the param received.
-static uint8_t known_pins[MAX_CHANNELS] = { 4,      // P1-7
-		17,      // P1-11
+static uint8_t known_pins[MAX_CHANNELS] = {
+		4,
+		5,
+		6,
+		12,
+		13,
+		16,
+		17,     // P1-11
 		18,     // P1-12
-		27,     // P1-13
-//		21,     // P1-40
-//		22,     // P1-15
+		19,
+		20,
+		21,     // P1-40
+		22,     // P1-15
 		23,     // P1-16
-//		24,     // P1-18
-//		25,     // P1-22
-		34,
+		24,     // P1-18
+		25,     // P1-22
+		26,
+		27,
+//		34,
 //		35,
 //		36,
 		};

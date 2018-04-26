@@ -121,9 +121,9 @@ static uint8_t pin2gpio[MAX_CHANNELS];
 #define CYCLE_TIME_US	2000
 #define SAMPLE_US		2
 #define NUM_SAMPLES		(CYCLE_TIME_US/SAMPLE_US)
-#define NUM_CBS			(NUM_SAMPLES*2)
+#define NUM_CBS			(NUM_SAMPLES*3)
 
-#define NUM_PAGES		((NUM_CBS * sizeof(dma_cb_t) + NUM_SAMPLES * 8 + \
+#define NUM_PAGES		((NUM_CBS * sizeof(dma_cb_t) + NUM_SAMPLES * 4 * 4 + \
 					PAGE_SIZE - 1) >> PAGE_SHIFT)
 
 #define DMA_BASE		(periph_virt_base + 0x00007000)
@@ -256,8 +256,15 @@ typedef struct {
 	uint32_t info, src, dst, length, stride, next, pad[2];
 } dma_cb_t;
 
+struct gpctl {
+	uint64_t gpset;
+	//uint32_t gpset_reserved;//reserved
+	uint64_t gpclr;
+	//uint32_t gpclr_reserved;//reserved
+};
+
 struct ctl {
-	uint64_t sample[NUM_SAMPLES];
+	struct gpctl sample[NUM_SAMPLES];
 	dma_cb_t cb[NUM_CBS];
 };
 
@@ -273,10 +280,10 @@ static volatile uint32_t *dma_reg; /* pointer to the DMA Channel registers we ar
 static volatile uint32_t *gpio_reg;
 
 static int delay_hw = DELAY_VIA_PWM;
-static int invert_mode = 0;
 static int daemonize = 1;
 
 static float channel_pwm[MAX_CHANNELS];
+static int invert_table[MAX_CHANNELS] = {};
 
 static void set_pwm(int channel, float value);
 static void update_pwm();
@@ -475,7 +482,7 @@ static int set_pin2gpio(int pin, float width) {
 	for (i = 0; i < num_channels; i++) {
 		if (pin2gpio[i] == pin || pin2gpio[i] == 0) {
 			if (pin2gpio[i] == 0) {
-				gpio_set(pin, invert_mode);
+				gpio_set(pin, invert_table[pin]);
 				gpio_set_mode(pin, GPIO_MODE_OUT);
 			}
 			pin2gpio[i] = pin;
@@ -555,6 +562,18 @@ static void release_pwm(int pin) {
 	update_pwm();
 }
 
+static void invert_pin(int pin, int invert) {
+	if (is_known_pin(pin)) {
+		invert_table[pin] = invert;
+	} else {
+		fprintf(stderr, "GPIO %d is not enabled for pi-blaster\n", pin);
+	}
+}
+static void invert_pwm(int pin, int invert) {
+	invert_pin(pin, invert);
+	update_pwm();
+}
+
 // Set pin2gpio pins, channel width and update the pwm send to pins being used.
 static void set_pwm(int channel, float width) {
 	int increment = 0;
@@ -603,56 +622,53 @@ static void set_all_pwm(float width) {
  */
 static void update_pwm() {
 
-	const uint32_t phys_gpclr0 = GPIO_PHYS_BASE + 0x28;
-	const uint32_t phys_gpset0 = GPIO_PHYS_BASE + 0x1c;
+	//const uint32_t phys_gpclr0 = GPIO_PHYS_BASE + 0x28;
+	//const uint32_t phys_gpset0 = GPIO_PHYS_BASE + 0x1c;
 	struct ctl *ctl = (struct ctl *) mbox.virt_addr;
-	uint64_t mask;
-	uint64_t mask_all;
+	uint64_t mask_set;
+	uint64_t mask_clr;
+	uint64_t mask_all_set;
+	uint64_t mask_all_clr;
 
 	int i, j;
-	/* First we turn on the channels that need to be on */
-	/*   Take the first DMA Packet and set it's target to start pulse */
-	if (invert_mode)
-		ctl->cb[0].dst = phys_gpclr0;
-	else
-		ctl->cb[0].dst = phys_gpset0;
 
 	/*   Now create a mask of all the pins that should be on */
-	mask_all = 0;
+	mask_all_set = 0;
+	mask_all_clr = 0;
 	for (i = 0; i < num_channels; i++) {
 		// Check the pin2gpio pin has been set to avoid locking all of them as PWM.
 		if (channel_pwm[i] > 0 && pin2gpio[i]) {
-			mask_all |= (uint64_t) 1 << pin2gpio[i];
+			if(invert_table[pin2gpio[i]] == 0){
+				mask_all_set |= (uint64_t) 1 << pin2gpio[i];
+			}else{
+				mask_all_clr |= (uint64_t) 1 << pin2gpio[i];
+			}
 		}
 	}
 	/*   And give that to the DMA controller to write */
-	ctl->sample[0] = mask_all;
+	ctl->sample[0].gpset = mask_all_set;
+	ctl->sample[0].gpclr = mask_all_clr;
 
 	/* Now we go through all the samples and turn the pins off when needed */
 	for (j = 1; j < NUM_SAMPLES; j++) {
-		if (invert_mode) {
-			if (ctl->cb[j * 2].dst == phys_gpset0) {
-				break;
-			}
-			ctl->cb[j * 2].dst = phys_gpset0;
-		} else {
-			if (ctl->cb[j * 2].dst == phys_gpclr0) {
-				break;
-			}
-			ctl->cb[j * 2].dst = phys_gpclr0;
-		}
-	}
-	for (j = 1; j < NUM_SAMPLES; j++) {
-		mask = 0;
+		mask_set = 0;
+		mask_clr = 0;
 		for (i = 0; i < num_channels; i++) {
 			// Check the pin2gpio pin has been set to avoid locking all of them as PWM.
 			if ((float) j / NUM_SAMPLES > channel_pwm[i] && pin2gpio[i])
-				mask |= (uint64_t) 1 << pin2gpio[i];
+			{
+				if(invert_table[pin2gpio[i]] == 0){
+					mask_clr |= (uint64_t) 1 << pin2gpio[i];
+				}else{
+					mask_set |= (uint64_t) 1 << pin2gpio[i];
+				}
+			}
 		}
-		if (mask == mask_all && ctl->sample[j] == mask_all) {
+		if (ctl->sample[j].gpclr == mask_all_set && ctl->sample[j].gpset == mask_all_clr) {
 			break;
 		}
-		ctl->sample[j] = mask;
+		ctl->sample[j].gpset = mask_set;
+		ctl->sample[j].gpclr = mask_clr;
 	}
 }
 
@@ -670,14 +686,30 @@ static void update_pwm_one(int pin, float width, float last_width) {
 		return;
 	} else if (last_idx < idx) {
 		for (int j = last_idx; j < NUM_SAMPLES && j <= idx; j++) {
-			ctl->sample[j] &= ~((uint64_t) 1 << pin);
+			if(invert_table[pin] == 0){
+				ctl->sample[j].gpclr &= ~((uint64_t) 1 << pin);
+			}else{
+				ctl->sample[j].gpset &= ~((uint64_t) 1 << pin);
+			}
 		}
-		ctl->sample[0] |= (uint64_t) 1 << pin;
+		if(invert_table[pin] == 0){
+			ctl->sample[0].gpset |= (uint64_t) 1 << pin;
+		}else{
+			ctl->sample[0].gpclr |= (uint64_t) 1 << pin;
+		}
 	} else {
 		for (int j = last_idx; j >= 1 && j >= idx; j--) {
-			ctl->sample[j] |= (uint64_t) 1 << pin;
+			if(invert_table[pin] == 0){
+				ctl->sample[j].gpclr |= (uint64_t) 1 << pin;
+			}else{
+				ctl->sample[j].gpset |= (uint64_t) 1 << pin;
+			}
 		}
-		ctl->sample[0] |= (uint64_t) 1 << pin;
+		if(invert_table[pin] == 0){
+			ctl->sample[0].gpset |= (uint64_t) 1 << pin;
+		}else{
+			ctl->sample[0].gpclr |= (uint64_t) 1 << pin;
+		}
 	}
 }
 
@@ -704,6 +736,7 @@ static void init_ctrl_data(void) {
 	uint32_t phys_fifo_addr;
 	uint32_t phys_gpclr0 = GPIO_PHYS_BASE + 0x28;
 	uint32_t phys_gpset0 = GPIO_PHYS_BASE + 0x1c;
+	uint32_t phys_gpctl = GPIO_PHYS_BASE + 0x1c;
 	uint64_t mask;
 	int i;
 
@@ -719,7 +752,7 @@ static void init_ctrl_data(void) {
 		mask |= (uint64_t) 1 << known_pins[i];
 	}
 	for (i = 0; i < NUM_SAMPLES; i++)
-		ctl->sample[i] = mask;
+		ctl->sample[i].gpclr = mask;
 
 	/* Initialize all the DMA commands. They come in pairs.
 	 *  - 1st command copies a value from the sample memory to a destination
@@ -730,16 +763,22 @@ static void init_ctrl_data(void) {
 		/* First DMA command */
 		cbp->info = DMA_SRC_INC | DMA_DST_INC | DMA_NO_WIDE_BURSTS
 				| DMA_WAIT_RESP;
-		cbp->src = mem_virt_to_phys(ctl->sample + i);
-		if (invert_mode)
-			cbp->dst = phys_gpset0;
-		else
-			cbp->dst = phys_gpclr0;
+		cbp->src = mem_virt_to_phys(&ctl->sample[i].gpset);
+		cbp->dst = phys_gpset0;
 		cbp->length = 8;
 		cbp->stride = 0;
 		cbp->next = mem_virt_to_phys(cbp + 1);
 		cbp++;
 		/* Second DMA command */
+		cbp->info = DMA_SRC_INC | DMA_DST_INC | DMA_NO_WIDE_BURSTS
+				| DMA_WAIT_RESP;
+		cbp->src = mem_virt_to_phys(&ctl->sample[i].gpclr);
+		cbp->dst = phys_gpclr0;
+		cbp->length = 8;
+		cbp->stride = 0;
+		cbp->next = mem_virt_to_phys(cbp + 1);
+		cbp++;
+		/* Third DMA command */
 		if (delay_hw == DELAY_VIA_PWM)
 			cbp->info = DMA_NO_WIDE_BURSTS | DMA_WAIT_RESP | DMA_D_DREQ
 					| DMA_PER_MAP(5);
@@ -903,6 +942,9 @@ static void go_go_go(void) {
 		} else if (sscanf(lineptr, "release %d%c", &servo, &nl) == 2
 				&& nl == '\n') {
 			release_pwm(servo);
+		} else if (sscanf(lineptr, "invert %d=%f%c", &servo, &value, &nl) == 3
+				&& nl == '\n') {
+			invert_pwm(servo, (value==0)?0:1);
 		} else if (sscanf(lineptr, "*=%f%c", &value, &nl) == 2 && nl == '\n') {
 			if (value < 0 || value > 1) {
 				fprintf(stderr, "Invalid value %f\n", value);
@@ -914,7 +956,7 @@ static void go_go_go(void) {
 			value = value / (float) CYCLE_TIME_US;
 			if (servo < 0) {
 				fprintf(stderr, "Invalid channel number %d\n", servo);
-			} else if (value < 0 || value > 1) {
+			} else if (value < -1 || value > 1) {
 				fprintf(stderr, "Invalid value %f\n", value);
 			} else {
 				set_pwm(servo, value);
@@ -923,7 +965,7 @@ static void go_go_go(void) {
 				&& nl == '\n') {
 			if (servo < 0) {
 				fprintf(stderr, "Invalid channel number %d\n", servo);
-			} else if (value < 0 || value > 1) {
+			} else if (value < -1 || value > 1) {
 				fprintf(stderr, "Invalid value %f\n", value);
 			} else {
 				set_pwm(servo, value);
@@ -941,8 +983,7 @@ void parseargs(int argc, char **argv) {
 	int i = 0;
 
 	static struct option longopts[] = { { "help", no_argument, 0, 'h' }, {
-			"gpio", required_argument, 0, 'g' },
-			{ "invert", no_argument, 0, 'i' }, { "pcm", no_argument, 0, 'p' }, {
+			"gpio", required_argument, 0, 'g' }, { "pcm", no_argument, 0, 'p' }, {
 					"version", no_argument, 0, 'v' }, { 0, 0, 0, 0 } };
 
 	while (1) {
@@ -966,7 +1007,6 @@ void parseargs(int argc, char **argv) {
 							"-D (--daemon)  - Don't daemonize\n"
 							"-g (--gpio)    - comma separated list of GPIOs to use\n"
 							"                 If omitted, default is \"4,17,18,27,21,22,23,24,25\"\n"
-							"-i (--invert)  - invert pin output (pulse LOW)\n"
 							"-p (--pcm)     - use pcm for dmascheduling\n"
 							"-v (--version) - version information\n", argv[0]);
 			exit(-1);
@@ -1017,10 +1057,6 @@ void parseargs(int argc, char **argv) {
 					known_pins[i] = 0;
 				}
 			}
-			break;
-
-		case 'i':
-			invert_mode = 1;
 			break;
 
 		case 'p':
